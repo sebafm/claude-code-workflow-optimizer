@@ -1,5 +1,6 @@
 # Claude Code runtime data (user-specific optimization sessions)
 .claude/optimize/
+.claude/settings.local.json
 
 # Keep development tools and project deliverables
 # .claude/agents/ - commit (our developed agents)
