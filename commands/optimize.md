@@ -32,12 +32,22 @@ find . -name "*.md" -o -name "*.yaml" -o -name "*.json" -not -path "./.git/*" | 
 
 ## Subagent Assignment for Analysis
 
+**Note:** This command attempts to use the following agents if they are available in your `~/.claude/agents/` directory. Missing agents will be skipped gracefully.
+
+### Required Analysis Agents
 1. **@code-reviewer**: Analyze code quality patterns, performance issues, and maintainability
 2. **@database-architect**: Review data access patterns and database interactions  
 3. **@python-backend-architect**: Check backend architecture alignment and API patterns
 4. **@security-auditor**: Identify security implications and best practices
 5. **@test-automation-engineer**: Analyze test coverage and identify test impact for potential changes
 6. **@task-decomposer**: Structure findings into actionable tasks with test considerations
+
+### Agent Compatibility
+- **Missing Agents**: The system will note which analysis capabilities are unavailable
+- **Alternative Agents**: Agents with similar names or capabilities will be detected automatically
+- **Graceful Degradation**: Analysis continues with available agents, reduced scope for missing ones
+
+**Future Enhancement:** v0.2.0 will include automatic agent discovery and intelligent capability mapping.
 
 ## Generate Issues JSON
 
