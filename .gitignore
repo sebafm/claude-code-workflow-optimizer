@@ -1,2 +1,45 @@
-# VSCode
+# Claude Code runtime data (user-specific optimization sessions)
+.claude/optimize/
+
+# Keep development tools and project deliverables
+# .claude/agents/ - commit (our developed agents)
+# .claude/commands/ - commit (development tools like commit-changes.md)
+# commands/ - commit (our main product)
+
+# IDE and editor files
+.vscode/settings.json
+.vscode/launch.json
+.idea/
 *.code-workspace
+*.swp
+*.swo
+*~
+
+# System files
+.DS_Store
+Thumbs.db
+.Trash-*
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+.cache/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Node.js (if we add any tooling later)
+node_modules/
+npm-debug.log*
+
+# Archives and packages
+*.zip
+*.tar.gz
+*.rar
+
+# Backup files
+*.bak
+*.backup
