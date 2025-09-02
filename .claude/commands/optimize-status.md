@@ -50,6 +50,7 @@ echo "QUICK COMMANDS:"
 echo "- Analyze changes: /optimize"
 echo "- Review issues: /optimize-review"  
 echo "- Migrate backlog: /optimize-gh-migrate"
+echo "- Backup data: /protect-optimize-data"
 echo "- Execute pending: bash .claude/optimize/pending/commands.sh"
 echo "- Safe cleanup: See OPTIMIZE_SYSTEM.md for maintenance commands"
 ```

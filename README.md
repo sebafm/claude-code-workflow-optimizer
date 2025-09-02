@@ -189,8 +189,23 @@ The system automatically detects available agents and can be customized via conf
 - **Custom Agents**: Add your own domain-specific agents to the configuration
 - **Agent Discovery**: System automatically detects new agents matching the expected interface
 - **Selective Usage**: Enable/disable agents based on project needs and optimization focus
+- **Project Setup**: `/optimize-setup` customizes agents with project-specific context and knowledge
 
 ## Advanced Features
+
+### Intelligent Project Setup
+- **Language Detection** - Automatic identification of programming languages and frameworks
+- **Agent Customization** - Project-specific agent configuration with contextual knowledge
+- **CLAUDE.md Integration** - Intelligent documentation integration with safety warnings
+- **Configuration Generation** - Optimization settings tailored to project characteristics
+- **Template Creation** - Standardized issue and report templates for consistency
+
+### Enhanced Commit Attribution
+- **Session Discovery** - Automatic detection and linking of recent optimization sessions
+- **Smart Commit Messages** - Context-aware commit message generation with issue details
+- **Bidirectional Linking** - Commits linked to sessions, sessions updated with commit references
+- **Audit Trail Creation** - Comprehensive tracking files for optimization history
+- **Git Integration** - Seamless staging, review, and commit workflow
 
 ### GitHub Integration
 - **Issue Creation** - Structured GitHub issues with optimization context

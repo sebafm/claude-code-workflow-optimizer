@@ -1,10 +1,21 @@
-# Claude Code runtime data (user-specific optimization sessions)
+# 🚨 CRITICAL: Claude Code runtime data (user-specific optimization sessions)
+# 
+# .claude/optimize/ contains IRREPLACEABLE user session data:
+# - decisions/ - User decision records and audit trails  
+# - completed/ - Completed optimization tracking
+# - agents/ - Dynamic agent assignments and configurations
+# - backlog.json - User-specific issue tracking
+#
+# ⚠️  NEVER commit this directory - it contains personal optimization history
+# ✅  Each user maintains their own optimization session data
+# 🛡️  Use tar.gz backup system (see commit-changes.md) for data protection
+#
 .claude/optimize/
 .claude/settings.local.json
 
 # Keep development tools and project deliverables
 # .claude/agents/ - commit (our developed agents)
-# .claude/commands/ - commit (development tools like commit-changes.md)
+# .claude/commands/ - commit (development tools like commit-changes.md)  
 # commands/ - commit (our main product)
 
 # IDE and editor files

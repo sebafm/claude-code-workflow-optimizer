@@ -26,10 +26,36 @@ graph LR
     K --> A
 ```
 
-## Commands Overview
+## Complete Command System
+
+The optimization system provides six integrated commands covering the full optimization lifecycle:
+
+### `/optimize-setup` - Project Initialization
+**Purpose:** One-time intelligent project setup and configuration
+**Features:**
+- **Project Analysis** - Automatic detection of languages, frameworks, testing tools
+- **Agent Customization** - Project-specific agent configuration with contextual knowledge  
+- **CLAUDE.md Integration** - Intelligent documentation integration with critical safety warnings
+- **Directory Structure** - Complete `.claude/optimize/` system initialization
+- **Configuration Generation** - Project-tailored optimization settings and templates
+
+**Input:** None (interactive setup with intelligent defaults)
+**Output:** 
+- `.claude/optimize/config.json` (project configuration)
+- `.claude/optimize/agents/` (customized agents with project context)
+- `.claude/optimize/templates/` (issue and report templates)
+- Updated `.claude/CLAUDE.md` with optimization system integration
+**When to use:** First time setting up optimization system in a project
+**Status:** "OPTIMIZATION SYSTEM INITIALIZED"
 
 ### `/optimize` - Analysis Phase
 **Purpose:** Analyze code changes for quality, architecture, and security issues
+**Features:**
+- Multi-agent code analysis using project-customized agents
+- Intelligent issue prioritization and categorization
+- Test impact analysis and recommendations
+- Integration with project configuration from setup
+
 **Output:** 
 - `.claude/optimize/pending/issues.json` (structured issues)
 - `.claude/optimize/reports/optimization_DATE.md` (detailed report)
@@ -48,6 +74,23 @@ graph LR
 - `.claude/optimize/completed/skipped_issues.json` (permanently dismissed issues)
 - `.claude/optimize/decisions/review_DATE.md` (decision tracking)
 **Status:** "READY FOR IMPLEMENTATION"
+
+### `/optimize-commit` - Attribution Phase
+**Purpose:** Intelligent git commit integration with optimization session tracking
+**Features:**
+- **Session Discovery** - Automatic detection of recent optimization sessions
+- **Issue Attribution** - Links commits to implemented optimization issues
+- **Smart Commit Messages** - Context-aware commit message generation with issue details
+- **Session Linking** - Bidirectional linking between commits and optimization sessions
+- **Git Integration** - Handles staging, review, and commit workflow
+
+**Input:** None (automatic session detection and user confirmation)
+**Output:**
+- Git commit with optimization-aware commit message
+- Updated session files with commit references
+- `.claude/optimize/decisions/commit_HASH_SESSION.md` (commit tracking)
+**When to use:** After implementing optimizations to commit changes with full context
+**Status:** "OPTIMIZATION IMPROVEMENTS COMMITTED"
 
 ### `/optimize-status` - Monitoring
 **Purpose:** System overview and health monitoring
@@ -112,49 +155,124 @@ pytest -xvs || exit 1
 @project-scribe document optimization-session
 ```
 
-## Workflow Examples
+## Complete Workflow Patterns
 
-### Standard Feature Development Cycle with Test-First Optimization
+### New Project Setup (One-time)
 ```bash
-# After completing a feature
-git add . && git commit -m "feat: user authentication system"
+# First-time setup with intelligent configuration
+/optimize-setup
+# → Detects: Python+FastAPI project with pytest and poetry
+# → Customizes: 8 agents with FastAPI-specific context  
+# → Creates: Project configuration and templates
+# → Integrates: CLAUDE.md with optimization system documentation
+# → Result: Complete optimization system ready for use
+```
 
-# Run optimization analysis (includes test impact analysis)
+### Daily Development Cycle with Full Attribution
+```bash
+# After completing a feature (with existing setup)
+git add .
+
+# Run optimization analysis using customized agents
 /optimize
-# → Creates issues.json with 10 findings including test impact
+# → Uses project-specific agents with FastAPI context
+# → Creates issues.json with 8 findings including test impact
+# → Generates detailed report with project-specific recommendations
 
-# Review and make decisions with test-first mindset
+# Review and make strategic decisions
 /optimize-review
-# User input: "Implement #1, #3, #8, Skip #2, Defer #4, #5, #6, #7, #9, #10"
+# User input: "Implement #1, #3, #8, gh-issue #2, #7, Defer #4, #5, #6, Skip #9, #10"
 # → Generates commands.sh with test-first workflow
+# → Creates 2 GitHub issues with optimization context
+# → Defers 3 items to backlog with session tracking
 
 # Execute test-driven improvements
 bash .claude/optimize/pending/commands.sh
-# → 1. Analyzes test impact
-# → 2. Updates tests before refactoring  
-# → 3. Implements changes with test safety
-# → 4. Validates with pytest
-# → 5. Documents only successful changes
+# → 1. Analyzes test impact using project test framework (pytest)
+# → 2. Updates tests before refactoring using FastAPI patterns
+# → 3. Implements changes with test safety guards
+# → 4. Validates with project test command
+# → 5. Documents successful changes with project context
 
-# Commit improvements (only if tests pass)
-/commit-changes
+# Commit with optimization attribution and session linking
+/optimize-commit
+# → Detects recent session: 20250902_143022
+# → Generates commit: "optimize(20250902_143022): implement 3 FastAPI improvements (OPT-001,OPT-003,OPT-008)"
+# → Links commit to optimization session bidirectionally
+# → Updates session file with commit hash
+# → Creates commit tracking file for audit trail
 
-# Check system status
+# Monitor system health and progress
 /optimize-status
+# → Shows: 3 implemented, 2 GitHub issues created, 3 deferred, 2 skipped
+# → Displays: Recent commit attribution and session links
+# → Provides: Next steps and system health status
 ```
 
-### Emergency Security Review
+### Pre-Release Quality Gate
 ```bash
-# Quick security audit
+# Comprehensive quality review before release
 /optimize
-# Focus on security findings
+/optimize-review
+# → "Implement all critical, Implement all high, gh-issue all medium, Defer all low"
+bash .claude/optimize/pending/commands.sh
+/optimize-commit
+# → "optimize(20250902_154530): implement pre-release quality improvements (8 issues)"
+
+# Convert remaining medium-priority items to GitHub issues for next iteration
+/optimize-gh-migrate
+# → "Convert all --comment='Post-release quality improvements'"
+```
+
+### Technical Debt Sprint
+```bash
+# Review accumulated backlog from previous sessions
+/optimize-status
+# → Shows: 12 deferred issues from past sessions across 4 categories
+
+# Implement accumulated technical debt
+/optimize-review
+# → "Implement all from backlog --comment='Tech debt sprint Q4'"
+bash .claude/optimize/pending/commands.sh
+/optimize-commit
+# → "optimize(20250902_163015): resolve technical debt backlog (12 improvements)"
+```
+
+### Team Collaboration Workflow
+```bash
+# Team member setting up on existing project
+/optimize-setup
+# → Detects existing project configuration
+# → Updates with local environment and agent availability
+# → Customizes agents for team member's specific context
+
+# Collaborative optimization session
+/optimize
+/optimize-review  
+# → "Implement local items, gh-issue team items --comment='Needs review: @teamlead'"
+bash .claude/optimize/pending/commands.sh
+/optimize-commit
+/optimize-gh-migrate
+# → Creates GitHub issues for team coordination and review
+```
+
+### Emergency Security Response
+```bash
+# Quick security audit using security-focused agents
+/optimize
+# → Security-auditor agent (customized with project context) identifies vulnerabilities
+# → Generates CRITICAL and HIGH priority security findings
 
 /optimize-review  
-# Prioritize all CRITICAL and HIGH security issues
-# "Implement #3, #5, #7 --comment='Security priority'"
+# → "Implement all critical security, Implement all high security --comment='Emergency security patch'"
 
 bash .claude/optimize/pending/commands.sh
-# Immediate implementation of security fixes
+# → Immediate implementation with security-focused test updates
+
+/optimize-commit
+# → "optimize(20250902_URGENT): emergency security fixes (OPT-001,OPT-003,OPT-007)"
+# → Creates detailed commit message with security issue attribution
+# → Links to security session for compliance audit trail
 ```
 
 ## Issue Categories and Priorities
@@ -282,8 +400,90 @@ echo "✅ Old optimization data archived"
 cp -r .claude/optimize/decisions/ backup/optimization-decisions-$(date +%Y%m%d)/
 ```
 
+### Recovery Procedures
+
+**⚠️ CRITICAL: Data Loss Prevention and Recovery**
+
+The `.claude/optimize/` directory contains all optimization session data and must be preserved. Accidental deletion results in complete loss of optimization history, decision records, and audit trails.
+
+**Emergency Recovery After Directory Deletion:**
+
+1. **Immediate Assessment:**
+   ```bash
+   # Check if directory exists
+   ls -la .claude/optimize/ 2>/dev/null || echo "❌ Directory deleted - recovery needed"
+   
+   # Check for backup sources
+   ls -la backup/optimization-decisions-*/ 2>/dev/null
+   ls -la archive/ 2>/dev/null
+   ```
+
+2. **Directory Structure Restoration:**
+   ```bash
+   # Recreate required directory structure
+   mkdir -p .claude/optimize/{pending,completed,decisions,backlog,reports}
+   echo "✅ Directory structure restored"
+   
+   # Verify restoration
+   find .claude/optimize -type d -exec ls -ld {} \;
+   ```
+
+3. **Data Recovery (if backups available):**
+   ```bash
+   # Restore from most recent backup
+   cp -r backup/optimization-decisions-*/decisions/* .claude/optimize/decisions/ 2>/dev/null
+   cp -r archive/*/optimization_*.md .claude/optimize/reports/ 2>/dev/null
+   cp -r archive/*/implemented_*.json .claude/optimize/completed/ 2>/dev/null
+   echo "✅ Available data restored from backups"
+   ```
+
+4. **Recovery Documentation:**
+   ```bash
+   # Create recovery session record
+   cat > .claude/optimize/completed/recovery_session_$(date +%Y%m%d).json << 'EOF'
+   {
+     "session_id": "recovery_$(date +%Y%m%d)_data_loss",
+     "session_date": "$(date +%Y-%m-%d)",
+     "session_type": "RECOVERY_SESSION",
+     "incident_type": "DIRECTORY_DELETION",
+     "recovery_status": "COMPLETED",
+     "data_recovery_status": "PARTIAL/COMPLETE",
+     "notes": ["Manual recovery from accidental directory deletion"]
+   }
+   EOF
+   echo "✅ Recovery session documented"
+   ```
+
+5. **System Validation:**
+   ```bash
+   # Test system functionality
+   /optimize-status
+   echo "✅ System functionality verified"
+   ```
+
+**Preventive Measures:**
+
+- **Regular Backups:** Use the backup commands above before major operations
+- **Version Control:** Keep `.claude/optimize/` in source control (excluding sensitive data)
+- **Documentation:** Maintain CHANGELOG.md with all optimization session details
+- **Monitoring:** Regular `/optimize-status` health checks
+
+**Data Loss Impact Assessment:**
+- **High Impact:** Complete loss of optimization audit trail and session history  
+- **Medium Impact:** Loss of decision rationale and implementation tracking
+- **Low Impact:** System functionality remains intact (implemented optimizations persist in code)
+
+**Recovery Validation Checklist:**
+- [ ] Directory structure restored
+- [ ] Available backup data restored  
+- [ ] Recovery session documented
+- [ ] System functionality verified
+- [ ] Preventive measures reviewed and implemented
+
 ### Safe Operations Only
 All maintenance operations are designed to preserve your existing `.claude/` agents, commands, and configurations. The isolated `.claude/optimize/` structure ensures safe cleanup with `rm -rf .claude/optimize/` without affecting other files.
+
+**⚠️ WARNING:** Never delete `.claude/optimize/` unless you have verified backups and understand the data loss implications. This directory contains irreplaceable optimization session data, audit trails, project-specific configuration, customized agent knowledge, and commit attribution history that cannot be recovered.
 
 ## Performance Expectations
 
