@@ -56,7 +56,7 @@ Claude Code Workflow Optimizer is a comprehensive system that integrates seamles
    claude-code /optimize-status
    ```
 
-For detailed system documentation, troubleshooting, and advanced usage, see [OPTIMIZE_SYSTEM.md](OPTIMIZE_SYSTEM.md).
+For detailed system documentation, troubleshooting, and advanced usage, see [OPTIMIZE_SYSTEM.md](docs/OPTIMIZE_SYSTEM.md).
 
 ### Basic Usage
 
@@ -270,8 +270,8 @@ bash .claude/optimize/pending/commands.sh
 ### Available Now
 - **Installation** - See Quick Start section above
 - **Basic Usage** - Core commands and examples throughout this README
-- **Complete System Guide** - [OPTIMIZE_SYSTEM.md](OPTIMIZE_SYSTEM.md) for detailed workflows, troubleshooting, and advanced usage
-- **Roadmap** - [ROADMAP.md](ROADMAP.md) for planned features and timeline
+- **Complete System Guide** - [OPTIMIZE_SYSTEM.md](docs/OPTIMIZE_SYSTEM.md) for detailed workflows, troubleshooting, and advanced usage
+- **Roadmap** - [ROADMAP.md](docs/ROADMAP.md) for planned features and timeline
 
 ### Coming Soon
 We're actively working on comprehensive documentation:
