@@ -147,6 +147,11 @@ jq -r '.issues[] | select(.priority == "MEDIUM") | "\(.id) [MEDIUM] \(.title)"' 
     grep -A 10 '"priority": "MEDIUM"' .claude/optimize/pending/issues.json | grep -E '"(id|title)":' | paste - - | sed 's/.*"id": "\([^"]*\)".*"title": "\([^"]*\)".*/\1 [MEDIUM] \2/'
 }
 
+jq -r '.issues[] | select(.priority == "LOW") | "\(.id) [LOW] \(.title)"' .claude/optimize/pending/issues.json 2>/dev/null || {
+    echo "Parsing LOW issues with fallback method..."
+    grep -A 10 '"priority": "LOW"' .claude/optimize/pending/issues.json | grep -E '"(id|title)":' | paste - - | sed 's/.*"id": "\([^"]*\)".*"title": "\([^"]*\)".*/\1 [LOW] \2/'
+}
+
 echo ""
 echo "DECISION COMMANDS:"
 echo ""
@@ -165,8 +170,17 @@ echo "- 'gh-issue all' (create GitHub issues for everything)"
 echo ""
 echo "Priority-based:"
 echo "- 'Implement all critical' (implement all CRITICAL priority issues)"
+echo "- 'Implement all high' (implement all HIGH priority issues)"
+echo "- 'Implement all medium' (implement all MEDIUM priority issues)"
+echo "- 'Implement all low' (implement all LOW priority issues)"
+echo "- 'gh-issue all critical' (create GitHub issues for all CRITICAL priority)"
 echo "- 'gh-issue all high' (create GitHub issues for all HIGH priority)" 
+echo "- 'gh-issue all medium' (create GitHub issues for all MEDIUM priority)"
+echo "- 'gh-issue all low' (create GitHub issues for all LOW priority)"
+echo "- 'Defer all critical' (defer all CRITICAL priority to backlog)"
+echo "- 'Defer all high' (defer all HIGH priority to backlog)"
 echo "- 'Defer all medium' (defer all MEDIUM priority to backlog)"
+echo "- 'Defer all low' (defer all LOW priority to backlog)"
 echo ""
 echo "Mixed Examples:"
 echo "- 'Implement all critical, gh-issue all high, Defer all medium'"
@@ -353,12 +367,12 @@ if [[ "$USER_INPUT" == *"--comment="* ]]; then
     echo "Found comment: $USER_COMMENTS"
 fi
 
-if [[ "$USER_INPUT" == *"Skip all"* ]]; then
+if [[ "$USER_INPUT" == *"SKIP ALL"* ]]; then
     echo "Batch operation: Skipping all issues"
     OPERATION_TYPE="skip_all"
     SKIP_COUNT=$(jq '.issues | length' .claude/optimize/pending/issues.json 2>/dev/null || grep -c '"id":' .claude/optimize/pending/issues.json)
     
-elif [[ "$USER_INPUT" == *"Implement all critical"* ]]; then
+elif [[ "$USER_INPUT" == *"IMPLEMENT ALL CRITICAL"* ]]; then
     echo "Batch operation: Implementing all CRITICAL priority issues"
     OPERATION_TYPE="implement_critical"
     SELECTED_ISSUES=$(jq -r '.issues[] | select(.priority == "CRITICAL") | .id' .claude/optimize/pending/issues.json 2>/dev/null | tr '\n' ',' | sed 's/,$//' || {
@@ -366,7 +380,31 @@ elif [[ "$USER_INPUT" == *"Implement all critical"* ]]; then
     })
     IMPLEMENT_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | grep -v '^$' | wc -l)
     
-elif [[ "$USER_INPUT" == *"Implement all"* ]]; then
+elif [[ "$USER_INPUT" == *"IMPLEMENT ALL HIGH"* ]]; then
+    echo "Batch operation: Implementing all HIGH priority issues"
+    OPERATION_TYPE="implement_high"
+    SELECTED_ISSUES=$(jq -r '.issues[] | select(.priority == "HIGH") | .id' .claude/optimize/pending/issues.json 2>/dev/null | tr '\n' ',' | sed 's/,$//' || {
+        grep -A 10 '"priority": "HIGH"' .claude/optimize/pending/issues.json | grep '"id":' | sed 's/.*"id": "\([^"]*\)".*/\1/' | tr '\n' ',' | sed 's/,$//'
+    })
+    IMPLEMENT_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | grep -v '^$' | wc -l)
+    
+elif [[ "$USER_INPUT" == *"IMPLEMENT ALL MEDIUM"* ]]; then
+    echo "Batch operation: Implementing all MEDIUM priority issues"
+    OPERATION_TYPE="implement_medium"
+    SELECTED_ISSUES=$(jq -r '.issues[] | select(.priority == "MEDIUM") | .id' .claude/optimize/pending/issues.json 2>/dev/null | tr '\n' ',' | sed 's/,$//' || {
+        grep -A 10 '"priority": "MEDIUM"' .claude/optimize/pending/issues.json | grep '"id":' | sed 's/.*"id": "\([^"]*\)".*/\1/' | tr '\n' ',' | sed 's/,$//'
+    })
+    IMPLEMENT_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | grep -v '^$' | wc -l)
+    
+elif [[ "$USER_INPUT" == *"IMPLEMENT ALL LOW"* ]]; then
+    echo "Batch operation: Implementing all LOW priority issues"
+    OPERATION_TYPE="implement_low"
+    SELECTED_ISSUES=$(jq -r '.issues[] | select(.priority == "LOW") | .id' .claude/optimize/pending/issues.json 2>/dev/null | tr '\n' ',' | sed 's/,$//' || {
+        grep -A 10 '"priority": "LOW"' .claude/optimize/pending/issues.json | grep '"id":' | sed 's/.*"id": "\([^"]*\)".*/\1/' | tr '\n' ',' | sed 's/,$//'
+    })
+    IMPLEMENT_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | grep -v '^$' | wc -l)
+    
+elif [[ "$USER_INPUT" == *"IMPLEMENT ALL"* ]]; then
     echo "Batch operation: Implementing all issues"
     OPERATION_TYPE="implement_all"
     SELECTED_ISSUES=$(jq -r '.issues[] | .id' .claude/optimize/pending/issues.json 2>/dev/null | tr '\n' ',' | sed 's/,$//' || {
@@ -374,19 +412,72 @@ elif [[ "$USER_INPUT" == *"Implement all"* ]]; then
     })
     IMPLEMENT_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | grep -v '^$' | wc -l)
     
-elif [[ "$USER_INPUT" == *"Defer all"* ]]; then
+elif [[ "$USER_INPUT" == *"DEFER ALL CRITICAL"* ]]; then
+    echo "Batch operation: Deferring all CRITICAL priority issues"
+    OPERATION_TYPE="defer_critical"
+    SELECTED_ISSUES=$(jq -r '.issues[] | select(.priority == "CRITICAL") | .id' .claude/optimize/pending/issues.json 2>/dev/null | tr '\n' ',' | sed 's/,$//' || {
+        grep -A 10 '"priority": "CRITICAL"' .claude/optimize/pending/issues.json | grep '"id":' | sed 's/.*"id": "\([^"]*\)".*/\1/' | tr '\n' ',' | sed 's/,$//'
+    })
+    DEFER_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | grep -v '^$' | wc -l)
+    
+elif [[ "$USER_INPUT" == *"DEFER ALL HIGH"* ]]; then
+    echo "Batch operation: Deferring all HIGH priority issues"
+    OPERATION_TYPE="defer_high"
+    SELECTED_ISSUES=$(jq -r '.issues[] | select(.priority == "HIGH") | .id' .claude/optimize/pending/issues.json 2>/dev/null | tr '\n' ',' | sed 's/,$//' || {
+        grep -A 10 '"priority": "HIGH"' .claude/optimize/pending/issues.json | grep '"id":' | sed 's/.*"id": "\([^"]*\)".*/\1/' | tr '\n' ',' | sed 's/,$//'
+    })
+    DEFER_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | grep -v '^$' | wc -l)
+    
+elif [[ "$USER_INPUT" == *"DEFER ALL MEDIUM"* ]]; then
+    echo "Batch operation: Deferring all MEDIUM priority issues"
+    OPERATION_TYPE="defer_medium"
+    SELECTED_ISSUES=$(jq -r '.issues[] | select(.priority == "MEDIUM") | .id' .claude/optimize/pending/issues.json 2>/dev/null | tr '\n' ',' | sed 's/,$//' || {
+        grep -A 10 '"priority": "MEDIUM"' .claude/optimize/pending/issues.json | grep '"id":' | sed 's/.*"id": "\([^"]*\)".*/\1/' | tr '\n' ',' | sed 's/,$//'
+    })
+    DEFER_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | grep -v '^$' | wc -l)
+    
+elif [[ "$USER_INPUT" == *"DEFER ALL LOW"* ]]; then
+    echo "Batch operation: Deferring all LOW priority issues"
+    OPERATION_TYPE="defer_low"
+    SELECTED_ISSUES=$(jq -r '.issues[] | select(.priority == "LOW") | .id' .claude/optimize/pending/issues.json 2>/dev/null | tr '\n' ',' | sed 's/,$//' || {
+        grep -A 10 '"priority": "LOW"' .claude/optimize/pending/issues.json | grep '"id":' | sed 's/.*"id": "\([^"]*\)".*/\1/' | tr '\n' ',' | sed 's/,$//'
+    })
+    DEFER_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | grep -v '^$' | wc -l)
+    
+elif [[ "$USER_INPUT" == *"DEFER ALL"* ]]; then
     echo "Batch operation: Deferring all issues"
     OPERATION_TYPE="defer_all"
     DEFER_COUNT=$(jq '.issues | length' .claude/optimize/pending/issues.json 2>/dev/null || grep -c '"id":' .claude/optimize/pending/issues.json)
 
-elif [[ "$USER_INPUT" == *"gh-issue all high"* ]]; then
+elif [[ "$USER_INPUT" == *"GH-ISSUE ALL CRITICAL"* ]]; then
+    echo "Batch operation: Creating GitHub issues for all CRITICAL priority"
+    OPERATION_TYPE="github_critical"
+    GITHUB_COUNT=$(jq '[.issues[] | select(.priority == "CRITICAL")] | length' .claude/optimize/pending/issues.json 2>/dev/null || {
+        grep -A 10 '"priority": "CRITICAL"' .claude/optimize/pending/issues.json | grep -c '"id":'
+    })
+    
+elif [[ "$USER_INPUT" == *"GH-ISSUE ALL HIGH"* ]]; then
     echo "Batch operation: Creating GitHub issues for all HIGH priority"
     OPERATION_TYPE="github_high"
     GITHUB_COUNT=$(jq '[.issues[] | select(.priority == "HIGH")] | length' .claude/optimize/pending/issues.json 2>/dev/null || {
         grep -A 10 '"priority": "HIGH"' .claude/optimize/pending/issues.json | grep -c '"id":'
     })
     
-elif [[ "$USER_INPUT" == *"gh-issue all"* ]]; then
+elif [[ "$USER_INPUT" == *"GH-ISSUE ALL MEDIUM"* ]]; then
+    echo "Batch operation: Creating GitHub issues for all MEDIUM priority"
+    OPERATION_TYPE="github_medium"
+    GITHUB_COUNT=$(jq '[.issues[] | select(.priority == "MEDIUM")] | length' .claude/optimize/pending/issues.json 2>/dev/null || {
+        grep -A 10 '"priority": "MEDIUM"' .claude/optimize/pending/issues.json | grep -c '"id":'
+    })
+    
+elif [[ "$USER_INPUT" == *"GH-ISSUE ALL LOW"* ]]; then
+    echo "Batch operation: Creating GitHub issues for all LOW priority"
+    OPERATION_TYPE="github_low"
+    GITHUB_COUNT=$(jq '[.issues[] | select(.priority == "LOW")] | length' .claude/optimize/pending/issues.json 2>/dev/null || {
+        grep -A 10 '"priority": "LOW"' .claude/optimize/pending/issues.json | grep -c '"id":'
+    })
+    
+elif [[ "$USER_INPUT" == *"GH-ISSUE ALL"* ]]; then
     echo "Batch operation: Creating GitHub issues for all"
     OPERATION_TYPE="github_all"
     GITHUB_COUNT=$(jq '.issues | length' .claude/optimize/pending/issues.json 2>/dev/null || grep -c '"id":' .claude/optimize/pending/issues.json)
@@ -400,16 +491,16 @@ else
     if [ -n "$SELECTED_ISSUES" ]; then
         echo "Found issue IDs: $SELECTED_ISSUES"
         
-        if [[ "$USER_INPUT" == *"Implement"* ]]; then
+        if [[ "$USER_INPUT" == *"IMPLEMENT"* ]]; then
             IMPLEMENT_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | wc -l)
         fi
-        if [[ "$USER_INPUT" == *"gh-issue"* ]]; then
+        if [[ "$USER_INPUT" == *"GH-ISSUE"* ]]; then
             GITHUB_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | wc -l)
         fi
-        if [[ "$USER_INPUT" == *"Defer"* ]]; then
+        if [[ "$USER_INPUT" == *"DEFER"* ]]; then
             DEFER_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | wc -l)
         fi
-        if [[ "$USER_INPUT" == *"Skip"* ]]; then
+        if [[ "$USER_INPUT" == *"SKIP"* ]]; then
             SKIP_COUNT=$(echo "$SELECTED_ISSUES" | tr ',' '\n' | wc -l)
         fi
     else
@@ -437,7 +528,7 @@ echo "Counts - Implement: $IMPLEMENT_COUNT, GitHub: $GITHUB_COUNT, Defer: $DEFER
 Generate implementation commands with test-first approach and GitHub integration:
 
 ```bash
-if [ $IMPLEMENT_COUNT -gt 0 ] || [ "$OPERATION_TYPE" = "implement_all" ] || [ "$OPERATION_TYPE" = "implement_critical" ]; then
+if [ $IMPLEMENT_COUNT -gt 0 ] || [ "$OPERATION_TYPE" = "implement_all" ] || [ "$OPERATION_TYPE" = "implement_critical" ] || [ "$OPERATION_TYPE" = "implement_high" ] || [ "$OPERATION_TYPE" = "implement_medium" ] || [ "$OPERATION_TYPE" = "implement_low" ]; then
     echo "Test Impact Analysis and Updates" >> "$COMMANDS_TEMP_FILE"
     printf '@test-automation-engineer analyze-test-impact --issues="%s" --generate-test-plan\n' "$SELECTED_ISSUES" >> "$COMMANDS_TEMP_FILE"
     echo "@test-automation-engineer update-tests --test-plan='impact-analysis.md' --validate-before-refactor" >> "$COMMANDS_TEMP_FILE"
@@ -471,19 +562,22 @@ if [ $IMPLEMENT_COUNT -gt 0 ] || [ "$OPERATION_TYPE" = "implement_all" ] || [ "$
     echo "" >> "$COMMANDS_TEMP_FILE"
 fi
 
-if [ $GITHUB_COUNT -gt 0 ] || [ "$OPERATION_TYPE" = "github_all" ] || [ "$OPERATION_TYPE" = "github_high" ]; then
+if [ $GITHUB_COUNT -gt 0 ] || [ "$OPERATION_TYPE" = "github_all" ] || [ "$OPERATION_TYPE" = "github_critical" ] || [ "$OPERATION_TYPE" = "github_high" ] || [ "$OPERATION_TYPE" = "github_medium" ] || [ "$OPERATION_TYPE" = "github_low" ]; then
     echo "GitHub Issue Creation" >> "$COMMANDS_TEMP_FILE"
     
-    if [ "$OPERATION_TYPE" = "github_all" ] || [ "$OPERATION_TYPE" = "github_high" ]; then
+    if [ "$OPERATION_TYPE" = "github_all" ] || [ "$OPERATION_TYPE" = "github_critical" ] || [ "$OPERATION_TYPE" = "github_high" ] || [ "$OPERATION_TYPE" = "github_medium" ] || [ "$OPERATION_TYPE" = "github_low" ]; then
         PRIORITY_FILTER=""
-        if [ "$OPERATION_TYPE" = "github_high" ]; then
-            PRIORITY_FILTER='"priority": "HIGH"'
-        fi
+        case "$OPERATION_TYPE" in
+            "github_critical") PRIORITY_FILTER="CRITICAL" ;;
+            "github_high") PRIORITY_FILTER="HIGH" ;;
+            "github_medium") PRIORITY_FILTER="MEDIUM" ;;
+            "github_low") PRIORITY_FILTER="LOW" ;;
+        esac
         
         # Use jq to process JSON properly, with fallback for systems without jq
         if command -v jq >/dev/null 2>&1; then
-            if [ "$OPERATION_TYPE" = "github_high" ]; then
-                jq -r --arg ts "$TIMESTAMP" '.issues[] | select(.priority == "HIGH") | "gh issue create --title=\"[OPTIMIZATION] \(.title | gsub("\\\\"; "\\\\\\\\") | gsub("\""; "\\\\\""))\" --body=\"Priority: \(.priority)\\nCategory: \(.category)\\nDescription: \(.description | gsub("\\\\"; "\\\\\\\\") | gsub("\""; "\\\\\""))\\nAgent: \(.assigned_agent)\\nGenerated from optimization session " + $ts + "\" --label=\"optimization,\(.priority | ascii_downcase)-priority\""' .claude/optimize/pending/issues.json >> "$COMMANDS_TEMP_FILE"
+            if [ -n "$PRIORITY_FILTER" ]; then
+                jq -r --arg ts "$TIMESTAMP" --arg priority "$PRIORITY_FILTER" '.issues[] | select(.priority == $priority) | "gh issue create --title=\"[OPTIMIZATION] \(.title | gsub("\\\\"; "\\\\\\\\") | gsub("\""; "\\\\\""))\" --body=\"Priority: \(.priority)\\nCategory: \(.category)\\nDescription: \(.description | gsub("\\\\"; "\\\\\\\\") | gsub("\""; "\\\\\""))\\nAgent: \(.assigned_agent)\\nGenerated from optimization session " + $ts + "\" --label=\"optimization,\(.priority | ascii_downcase)-priority\""' .claude/optimize/pending/issues.json >> "$COMMANDS_TEMP_FILE"
             else
                 jq -r --arg ts "$TIMESTAMP" '.issues[] | "gh issue create --title=\"[OPTIMIZATION] \(.title | gsub("\\\\"; "\\\\\\\\") | gsub("\""; "\\\\\""))\" --body=\"Priority: \(.priority)\\nCategory: \(.category)\\nDescription: \(.description | gsub("\\\\"; "\\\\\\\\") | gsub("\""; "\\\\\""))\\nAgent: \(.assigned_agent)\\nGenerated from optimization session " + $ts + "\" --label=\"optimization,\(.priority | ascii_downcase)-priority\""' .claude/optimize/pending/issues.json >> "$COMMANDS_TEMP_FILE"
             fi
@@ -504,7 +598,7 @@ if [ $GITHUB_COUNT -gt 0 ] || [ "$OPERATION_TYPE" = "github_all" ] || [ "$OPERAT
                 elif [[ $line == *'"description":'* ]]; then
                     ISSUE_DESC=$(echo "$line" | sed 's/.*"description": "\([^"]*\)".*/\1/')
                     
-                    if [ -z "$PRIORITY_FILTER" ] || [[ $ISSUE_PRIORITY == "HIGH" ]]; then
+                    if [ -z "$PRIORITY_FILTER" ] || [[ $ISSUE_PRIORITY == "$PRIORITY_FILTER" ]]; then
                         printf 'gh issue create --title="[OPTIMIZATION] %s" --body="Priority: %s\\nCategory: %s\\nDescription: %s\\nAgent: %s\\nGenerated from optimization session %s" --label="optimization,%s-priority"\n' \
                             "$(printf '%s' "$ISSUE_TITLE" | sed 's/[\\\"`$]/\\&/g')" \
                             "$ISSUE_PRIORITY" \
@@ -558,7 +652,7 @@ if [ $GITHUB_COUNT -gt 0 ] || [ "$OPERATION_TYPE" = "github_all" ] || [ "$OPERAT
     echo "" >> "$COMMANDS_TEMP_FILE"
 fi
 
-if [ $DEFER_COUNT -gt 0 ] || [ "$OPERATION_TYPE" = "defer_all" ]; then
+if [ $DEFER_COUNT -gt 0 ] || [ "$OPERATION_TYPE" = "defer_all" ] || [ "$OPERATION_TYPE" = "defer_critical" ] || [ "$OPERATION_TYPE" = "defer_high" ] || [ "$OPERATION_TYPE" = "defer_medium" ] || [ "$OPERATION_TYPE" = "defer_low" ]; then
     echo "Moving deferred issues to backlog with atomic operations..." 
     
     # Create temporary file for backlog with atomic operations
