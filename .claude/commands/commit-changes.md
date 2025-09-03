@@ -35,9 +35,6 @@ fi
 # Check if repository has any commits
 if ! git rev-parse HEAD >/dev/null 2>&1; then
     echo "ℹ️  Note: Repository appears to be newly initialized (no commits yet)"
-    REPO_IS_NEW=true
-else
-    REPO_IS_NEW=false
 fi
 
 echo "Repository validation complete. Collecting git status..."
@@ -49,7 +46,7 @@ echo ""
 - Unstaged changes: !`git diff --name-status 2>/dev/null || echo "No unstaged changes or git error"`  
 - Staged changes: !`git diff --staged --name-status 2>/dev/null || echo "No staged changes or git error"`
 - Current branch: !`git branch --show-current 2>/dev/null || echo "Unable to determine branch"`
-- Last 5 commits: !`if [ "$REPO_IS_NEW" = "false" ]; then git log --oneline -5 2>/dev/null || echo "Unable to get commit history"; else echo "No commits yet"; fi`
+- Last 5 commits: !`git log --oneline -5 2>/dev/null || echo "No commits yet"`
 
 ## Commit Strategy
 
