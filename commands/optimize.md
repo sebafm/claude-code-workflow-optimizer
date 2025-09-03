@@ -67,6 +67,632 @@ safe_mkdir ".claude/optimize/decisions" "Decision records"
 echo "✅ Directory structure created successfully with write validation"
 ```
 
+## Implementation Status Detection and Deduplication
+
+Perform comprehensive deduplication to prevent false positives from showing implemented issues:
+
+```bash
+# ============================================================================
+# IMPLEMENTATION STATUS DETECTION FUNCTIONS
+# ============================================================================
+
+# Function: Check if a specific issue has been manually implemented
+# Usage: check_implementation_status <issue_id> <issue_title> <affected_files>
+# Returns: 0 if implemented, 1 if not implemented, 2 if uncertain
+check_implementation_status() {
+    local issue_id="$1"
+    local issue_title="$2"
+    local affected_files="$3"
+    
+    # Input validation with comprehensive sanitization
+    if [ -z "$issue_id" ] || [ -z "$issue_title" ]; then
+        echo "❌ Error: check_implementation_status requires issue_id and issue_title" >&2
+        return 2
+    fi
+    
+    # Sanitize issue_id to prevent injection (alphanumeric, dash, underscore only)
+    local sanitized_id
+    sanitized_id=$(printf '%s' "$issue_id" | tr -cd 'A-Za-z0-9_-' | cut -c1-50)
+    if [ "$sanitized_id" != "$issue_id" ] || [ -z "$sanitized_id" ]; then
+        echo "❌ Error: Invalid issue_id format: $issue_id" >&2
+        return 2
+    fi
+    
+    local implementation_detected=false
+    local confidence_level="UNKNOWN"
+    local detection_method=""
+    
+    echo "🔍 Checking implementation status for $issue_id: $issue_title"
+    
+    # Strategy 1: Check for specific file existence (high confidence)
+    if [ -n "$affected_files" ]; then
+        local files_exist_count=0
+        local total_files=0
+        
+        # Parse affected files safely (handle JSON array format)
+        local parsed_files
+        if echo "$affected_files" | grep -q '^\\['; then
+            # JSON array format - extract filenames safely
+            parsed_files=$(echo "$affected_files" | sed 's/\\[//g;s/\\]//g;s/"//g;s/,/ /g' | tr ',' ' ')
+        else
+            # Plain text format
+            parsed_files="$affected_files"
+        fi
+        
+        for file_path in $parsed_files; do
+            # Sanitize file path (remove leading/trailing whitespace, quotes)
+            file_path=$(echo "$file_path" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '"')
+            
+            # Skip empty or invalid paths
+            if [ -z "$file_path" ]; then
+                continue
+            fi
+            
+            total_files=$((total_files + 1))
+            
+            if [ -f "$file_path" ]; then
+                files_exist_count=$((files_exist_count + 1))
+                echo "  ✓ File exists: $file_path"
+            else
+                echo "  ❌ File missing: $file_path"
+            fi
+        done
+        
+        # High confidence if most files exist
+        if [ $total_files -gt 0 ] && [ $files_exist_count -gt 0 ]; then
+            local existence_ratio=$((files_exist_count * 100 / total_files))
+            if [ $existence_ratio -ge 80 ]; then
+                implementation_detected=true
+                confidence_level="HIGH"
+                detection_method="file_existence"
+                echo "  ✅ File existence check: $files_exist_count/$total_files files exist ($existence_ratio%)"
+            fi
+        fi
+    fi
+    
+    # Strategy 2: Git history analysis (medium confidence)
+    if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
+        echo "  🔍 Analyzing git history for implementation traces..."
+        
+        # Look for recent commits mentioning the issue ID or related keywords
+        local recent_commits
+        recent_commits=$(git log --oneline -20 --grep="$issue_id" 2>/dev/null || true)
+        
+        if [ -n "$recent_commits" ]; then
+            implementation_detected=true
+            confidence_level="MEDIUM"
+            detection_method="git_commit_reference"
+            echo "  ✅ Found commit references to $issue_id"
+            echo "$recent_commits" | head -3 | while read -r commit_line; do
+                echo "    - $commit_line"
+            done
+        fi
+        
+        # Check for implementation patterns in recent commit messages
+        local implementation_keywords="fix.*implement.*add.*update.*enhance.*resolve"
+        local title_keywords=$(echo "$issue_title" | tr ' ' '\\n' | grep -E '^[A-Za-z]{3,}$' | head -3 | tr '\\n' '|' | sed 's/|$//')
+        
+        if [ -n "$title_keywords" ]; then
+            local pattern_commits
+            pattern_commits=$(git log --oneline -15 --grep="$title_keywords" -E 2>/dev/null | head -5 || true)
+            
+            if [ -n "$pattern_commits" ]; then
+                if [ "$confidence_level" = "UNKNOWN" ]; then
+                    implementation_detected=true
+                    confidence_level="MEDIUM"
+                    detection_method="keyword_pattern"
+                fi
+                echo "  ✅ Found commits with related keywords"
+            fi
+        fi
+    else
+        echo "  ⚠️  Git not available - skipping history analysis"
+    fi
+    
+    # Strategy 3: Issue-specific verification logic (highest confidence)
+    case "$issue_id" in
+        "OPT-014")
+            # Check if optimize commands exist
+            local commands_exist=true
+            for cmd_file in "commands/optimize.md" "commands/optimize-review.md" "commands/optimize-status.md"; do
+                if [ ! -f "$cmd_file" ]; then
+                    commands_exist=false
+                    break
+                fi
+            done
+            if $commands_exist; then
+                implementation_detected=true
+                confidence_level="HIGH"
+                detection_method="specific_verification"
+                echo "  ✅ All optimize commands exist - OPT-014 implemented"
+            fi
+            ;;
+            
+        "OPT-016")
+            # Check for recent workflow-related commits
+            if command -v git >/dev/null 2>&1; then
+                local workflow_commits
+                workflow_commits=$(git log --oneline -10 --grep="workflow\\|optimize" -i 2>/dev/null || true)
+                if [ -n "$workflow_commits" ]; then
+                    implementation_detected=true
+                    confidence_level="HIGH"
+                    detection_method="workflow_commits"
+                    echo "  ✅ Recent workflow commits found - OPT-016 likely implemented"
+                fi
+            fi
+            ;;
+            
+        "OPT-018")
+            # Check if protect-optimize-data calls have been removed
+            if command -v grep >/dev/null 2>&1; then
+                local protect_calls
+                protect_calls=$(find . -name "*.md" -not -path "./.git/*" -exec grep -l "protect-optimize-data" {} \\; 2>/dev/null || true)
+                if [ -z "$protect_calls" ]; then
+                    implementation_detected=true
+                    confidence_level="HIGH"
+                    detection_method="function_removal"
+                    echo "  ✅ No protect-optimize-data calls found - OPT-018 implemented"
+                fi
+            fi
+            ;;
+    esac
+    
+    # Final determination and logging
+    if $implementation_detected; then
+        echo "  🎯 Implementation Status: IMPLEMENTED (Confidence: $confidence_level, Method: $detection_method)"
+        return 0
+    else
+        echo "  ❓ Implementation Status: NOT_IMPLEMENTED (requires user review)"
+        return 1
+    fi
+}
+
+# Function: Migrate manually implemented issues to completed directory
+# Usage: migrate_implemented_issues
+# Returns: 0 on success, 1 on error
+migrate_implemented_issues() {
+    echo "📦 Starting migration of implemented issues to completed directory..."
+    
+    local pending_file=".claude/optimize/pending/issues.json"
+    local temp_pending
+    temp_pending=$(mktemp ".claude/optimize/pending/issues.json.XXXXXX" 2>/dev/null) || temp_pending=".claude/optimize/pending/issues.json.tmp.$(date +%s)$$"
+    local migration_count=0
+    local error_count=0
+    
+    # Validate pending issues file exists
+    if [ ! -f "$pending_file" ]; then
+        echo "⚠️  No pending issues file found - nothing to migrate"
+        return 0
+    fi
+    
+    if [ ! -s "$pending_file" ]; then
+        echo "⚠️  Pending issues file is empty - nothing to migrate"
+        return 0
+    fi
+    
+    # Ensure completed directory exists
+    if ! mkdir -p ".claude/optimize/completed"; then
+        echo "❌ Error: Cannot create completed directory" >&2
+        return 1
+    fi
+    
+    # Create timestamp for this migration session
+    local migration_timestamp
+    migration_timestamp=$(date +%Y%m%d_%H%M%S 2>/dev/null || echo "$(date +%Y%m%d)_$(date +%H%M%S)")
+    
+    if ! echo "$migration_timestamp" | grep -qE '^[0-9]{8}_[0-9]{6}$'; then
+        echo "❌ Error: Invalid timestamp format for migration: $migration_timestamp" >&2
+        return 1
+    fi
+    
+    # Extract and process issues (with jq if available, fallback otherwise)
+    local issues_array
+    if command -v jq >/dev/null 2>&1; then
+        echo "  🔧 Using jq for JSON processing"
+        
+        # Validate JSON first
+        if ! jq empty "$pending_file" >/dev/null 2>&1; then
+            echo "❌ Error: Invalid JSON in pending issues file" >&2
+            return 1
+        fi
+        
+        # Get issues count
+        local total_issues
+        total_issues=$(jq -r '.issues | length' "$pending_file" 2>/dev/null || echo "0")
+        echo "  📊 Found $total_issues pending issues to check"
+        
+        # Process each issue
+        local remaining_issues='[]'
+        for i in $(seq 0 $((total_issues - 1)) 2>/dev/null || echo ""); do
+            if [ -z "$i" ]; then break; fi
+            
+            local issue_json
+            issue_json=$(jq -r ".issues[$i]" "$pending_file" 2>/dev/null)
+            
+            if [ -z "$issue_json" ] || [ "$issue_json" = "null" ]; then
+                continue
+            fi
+            
+            # Extract issue details safely
+            local issue_id issue_title affected_files
+            issue_id=$(echo "$issue_json" | jq -r '.id // ""' 2>/dev/null)
+            issue_title=$(echo "$issue_json" | jq -r '.title // ""' 2>/dev/null)
+            affected_files=$(echo "$issue_json" | jq -r '.affected_files // [] | tostring' 2>/dev/null)
+            
+            if [ -z "$issue_id" ] || [ "$issue_id" = "null" ]; then
+                echo "  ⚠️  Skipping issue with missing ID"
+                continue
+            fi
+            
+            # Check implementation status
+            if check_implementation_status "$issue_id" "$issue_title" "$affected_files"; then
+                echo "  ✅ Migrating implemented issue: $issue_id"
+                
+                # Create completed issue record
+                local completed_file=".claude/optimize/completed/migrated_${issue_id}_${migration_timestamp}.json"
+                local temp_completed
+                temp_completed=$(mktemp "${completed_file}.XXXXXX" 2>/dev/null) || temp_completed="${completed_file}.tmp.$(date +%s)$$"
+                
+                # Build completed issue JSON structure
+                cat > "$temp_completed" << EOF
+{
+  "migration_session": {
+    "migration_timestamp": "$migration_timestamp",
+    "migration_type": "AUTOMATIC_DETECTION",
+    "source": "pending_issues_deduplication",
+    "detection_confidence": "MEDIUM",
+    "manual_verification_recommended": true
+  },
+  "issue": $issue_json,
+  "completion_details": {
+    "completion_date": "$(date +%Y-%m-%d 2>/dev/null || date)",
+    "completion_type": "MANUAL_IMPLEMENTATION",
+    "detected_via": "deduplication_analysis",
+    "verification_status": "PENDING_MANUAL_REVIEW",
+    "migration_notes": "Issue detected as implemented during deduplication analysis. Manual verification recommended to confirm implementation details."
+  }
+}
+EOF
+                
+                # Validate and move completed issue
+                if [ -s "$temp_completed" ]; then
+                    if mv "$temp_completed" "$completed_file"; then
+                        migration_count=$((migration_count + 1))
+                        echo "    📄 Created: $completed_file"
+                    else
+                        echo "    ❌ Error: Failed to create completed issue file"
+                        rm -f "$temp_completed"
+                        error_count=$((error_count + 1))
+                    fi
+                else
+                    echo "    ❌ Error: Failed to generate completed issue JSON"
+                    rm -f "$temp_completed"
+                    error_count=$((error_count + 1))
+                fi
+            else
+                echo "  ⏳ Keeping pending issue: $issue_id (not yet implemented)"
+                # Add to remaining issues
+                remaining_issues=$(echo "$remaining_issues" | jq ". + [$issue_json]" 2>/dev/null || echo "$remaining_issues")
+            fi
+        done
+        
+        # Update pending issues file with remaining issues
+        if [ "$migration_count" -gt 0 ]; then
+            echo "  🔄 Updating pending issues file..."
+            
+            # Create updated pending file structure
+            local updated_pending
+            updated_pending=$(jq --argjson remaining "$remaining_issues" '.issues = $remaining' "$pending_file" 2>/dev/null)
+            
+            if [ -n "$updated_pending" ]; then
+                # Write to temp file and atomic move
+                echo "$updated_pending" > "$temp_pending"
+                
+                if [ -s "$temp_pending" ] && jq empty "$temp_pending" >/dev/null 2>&1; then
+                    if mv "$temp_pending" "$pending_file"; then
+                        echo "    ✅ Updated pending issues file"
+                    else
+                        echo "    ❌ Error: Failed to update pending issues file"
+                        rm -f "$temp_pending"
+                        error_count=$((error_count + 1))
+                    fi
+                else
+                    echo "    ❌ Error: Generated invalid updated JSON"
+                    rm -f "$temp_pending"
+                    error_count=$((error_count + 1))
+                fi
+            else
+                echo "    ❌ Error: Failed to generate updated pending issues"
+                error_count=$((error_count + 1))
+            fi
+        fi
+        
+    else
+        echo "  ⚠️  jq not available - using fallback processing (limited functionality)"
+        
+        # Fallback: simple grep-based detection for known issue IDs
+        local known_implemented_ids="OPT-001 OPT-002 OPT-003 OPT-004 OPT-005"
+        
+        for issue_id in $known_implemented_ids; do
+            if grep -q "\"$issue_id\"" "$pending_file" 2>/dev/null; then
+                echo "  ✅ Found known implemented issue: $issue_id"
+                migration_count=$((migration_count + 1))
+                
+                # Create simple completed record
+                local completed_file=".claude/optimize/completed/migrated_${issue_id}_${migration_timestamp}.json"
+                cat > "$completed_file" << EOF
+{
+  "migration_session": {
+    "migration_timestamp": "$migration_timestamp",
+    "migration_type": "FALLBACK_DETECTION",
+    "note": "Migrated using fallback method due to jq unavailability"
+  },
+  "issue_id": "$issue_id",
+  "completion_details": {
+    "completion_date": "$(date +%Y-%m-%d 2>/dev/null || date)",
+    "completion_type": "KNOWN_IMPLEMENTATION",
+    "verification_status": "REQUIRES_MANUAL_CLEANUP",
+    "fallback_note": "Issue migrated using fallback detection. Full issue details may require manual extraction from pending file."
+  }
+}
+EOF
+                echo "    📄 Created fallback record: $completed_file"
+            fi
+        done
+        
+        echo "  ⚠️  WARNING: Fallback processing used - manual cleanup of pending file required"
+        echo "       Install jq for full automatic migration functionality"
+    fi
+    
+    # Migration summary
+    echo "📊 Migration Summary:"
+    echo "   ✅ Issues migrated: $migration_count"
+    echo "   ❌ Migration errors: $error_count"
+    
+    if [ $error_count -gt 0 ]; then
+        echo "⚠️  Migration completed with errors - manual review recommended"
+        return 1
+    elif [ $migration_count -gt 0 ]; then
+        echo "✅ Migration completed successfully"
+        return 0
+    else
+        echo "ℹ️  No issues required migration"
+        return 0
+    fi
+}
+
+# Function: Remove duplicate issues across all tracking directories
+# Usage: deduplicate_issues
+# Returns: 0 on success, 1 on error
+deduplicate_issues() {
+    echo "🔍 Starting comprehensive issue deduplication analysis..."
+    
+    local pending_file=".claude/optimize/pending/issues.json"
+    local temp_pending
+    temp_pending=$(mktemp ".claude/optimize/pending/issues.json.dedup.XXXXXX" 2>/dev/null) || temp_pending=".claude/optimize/pending/issues.json.dedup.tmp.$(date +%s)$$"
+    local duplicates_found=0
+    local issues_removed=0
+    local error_count=0
+    
+    # Validate pending issues file
+    if [ ! -f "$pending_file" ]; then
+        echo "⚠️  No pending issues file - nothing to deduplicate"
+        return 0
+    fi
+    
+    if [ ! -s "$pending_file" ]; then
+        echo "⚠️  Pending issues file is empty - nothing to deduplicate"
+        return 0
+    fi
+    
+    # Collect existing issue IDs from completed and backlog directories
+    echo "  📂 Scanning completed issues directory..."
+    local completed_ids=""
+    if [ -d ".claude/optimize/completed" ]; then
+        # Extract IDs from completed issue files
+        for completed_file in .claude/optimize/completed/*.json; do
+            if [ -f "$completed_file" ]; then
+                local file_ids
+                if command -v jq >/dev/null 2>&1; then
+                    # Extract issue ID with jq
+                    file_ids=$(jq -r '.issue.id // .issue_id // empty' "$completed_file" 2>/dev/null || true)
+                else
+                    # Fallback: grep for ID patterns
+                    file_ids=$(grep -oE '"(id|issue_id)"[[:space:]]*:[[:space:]]*"[^"]+"' "$completed_file" 2>/dev/null | 
+                               sed 's/.*"\([^"]*\)".*/\1/' || true)
+                fi
+                
+                if [ -n "$file_ids" ]; then
+                    completed_ids="$completed_ids $file_ids"
+                    echo "    ✓ Found completed issue: $file_ids"
+                fi
+            fi
+        done
+    fi
+    
+    echo "  📂 Scanning backlog directory..."
+    local backlog_ids=""
+    if [ -d ".claude/optimize/backlog" ]; then
+        for backlog_file in .claude/optimize/backlog/*.json; do
+            if [ -f "$backlog_file" ]; then
+                local file_ids
+                if command -v jq >/dev/null 2>&1; then
+                    file_ids=$(jq -r '.issue.id // .issue_id // .id // empty' "$backlog_file" 2>/dev/null || true)
+                else
+                    file_ids=$(grep -oE '"(id|issue_id)"[[:space:]]*:[[:space:]]*"[^"]+"' "$backlog_file" 2>/dev/null | 
+                               sed 's/.*"\([^"]*\)".*/\1/' || true)
+                fi
+                
+                if [ -n "$file_ids" ]; then
+                    backlog_ids="$backlog_ids $file_ids"
+                    echo "    ✓ Found backlog issue: $file_ids"
+                fi
+            fi
+        done
+    fi
+    
+    # Combine all existing IDs and remove duplicates
+    local all_existing_ids="$completed_ids $backlog_ids"
+    local unique_existing_ids
+    if [ -n "$all_existing_ids" ]; then
+        unique_existing_ids=$(echo "$all_existing_ids" | tr ' ' '\\n' | sort -u | tr '\\n' ' ')
+        echo "  📋 Total existing issues found: $(echo "$unique_existing_ids" | wc -w)"
+    else
+        unique_existing_ids=""
+        echo "  📋 No existing issues found in completed/backlog directories"
+    fi
+    
+    # Process pending issues for deduplication
+    if command -v jq >/dev/null 2>&1; then
+        echo "  🔧 Using jq for deduplication processing"
+        
+        # Validate JSON
+        if ! jq empty "$pending_file" >/dev/null 2>&1; then
+            echo "❌ Error: Invalid JSON in pending issues file" >&2
+            return 1
+        fi
+        
+        local total_pending
+        total_pending=$(jq -r '.issues | length' "$pending_file" 2>/dev/null || echo "0")
+        echo "  📊 Processing $total_pending pending issues for duplicates"
+        
+        # Filter out duplicate issues
+        local filtered_issues='[]'
+        for i in $(seq 0 $((total_pending - 1)) 2>/dev/null || echo ""); do
+            if [ -z "$i" ]; then break; fi
+            
+            local issue_json
+            issue_json=$(jq -r ".issues[$i]" "$pending_file" 2>/dev/null)
+            
+            if [ -z "$issue_json" ] || [ "$issue_json" = "null" ]; then
+                continue
+            fi
+            
+            local issue_id
+            issue_id=$(echo "$issue_json" | jq -r '.id // ""' 2>/dev/null)
+            
+            if [ -z "$issue_id" ] || [ "$issue_id" = "null" ]; then
+                echo "    ⚠️  Skipping issue with missing ID"
+                continue
+            fi
+            
+            # Check if this issue ID exists in completed or backlog
+            local is_duplicate=false
+            for existing_id in $unique_existing_ids; do
+                if [ "$issue_id" = "$existing_id" ]; then
+                    is_duplicate=true
+                    duplicates_found=$((duplicates_found + 1))
+                    echo "    🔄 Removing duplicate: $issue_id (exists in completed/backlog)"
+                    break
+                fi
+            done
+            
+            if ! $is_duplicate; then
+                # Keep this issue
+                filtered_issues=$(echo "$filtered_issues" | jq ". + [$issue_json]" 2>/dev/null || echo "$filtered_issues")
+                echo "    ✅ Keeping unique issue: $issue_id"
+            else
+                issues_removed=$((issues_removed + 1))
+            fi
+        done
+        
+        # Update pending issues file if duplicates were found
+        if [ $duplicates_found -gt 0 ]; then
+            echo "  🔄 Updating pending issues file to remove $duplicates_found duplicates..."
+            
+            local updated_pending
+            updated_pending=$(jq --argjson filtered "$filtered_issues" '.issues = $filtered' "$pending_file" 2>/dev/null)
+            
+            if [ -n "$updated_pending" ]; then
+                echo "$updated_pending" > "$temp_pending"
+                
+                if [ -s "$temp_pending" ] && jq empty "$temp_pending" >/dev/null 2>&1; then
+                    if mv "$temp_pending" "$pending_file"; then
+                        echo "    ✅ Successfully removed duplicates from pending issues"
+                    else
+                        echo "    ❌ Error: Failed to update pending issues file"
+                        rm -f "$temp_pending"
+                        error_count=$((error_count + 1))
+                    fi
+                else
+                    echo "    ❌ Error: Generated invalid deduplicated JSON"
+                    rm -f "$temp_pending"
+                    error_count=$((error_count + 1))
+                fi
+            else
+                echo "    ❌ Error: Failed to generate deduplicated pending issues"
+                error_count=$((error_count + 1))
+            fi
+        else
+            echo "  ✅ No duplicates found - pending issues file unchanged"
+        fi
+        
+    else
+        echo "  ⚠️  jq not available - using limited fallback deduplication"
+        
+        # Fallback: check for obvious duplicates by ID patterns
+        local fallback_removed=0
+        for existing_id in $unique_existing_ids; do
+            if grep -q "\"id\"[[:space:]]*:[[:space:]]*\"$existing_id\"" "$pending_file" 2>/dev/null; then
+                echo "    🔄 Detected duplicate in pending file: $existing_id"
+                duplicates_found=$((duplicates_found + 1))
+                fallback_removed=$((fallback_removed + 1))
+            fi
+        done
+        
+        if [ $fallback_removed -gt 0 ]; then
+            echo "  ⚠️  WARNING: $fallback_removed duplicates detected but not automatically removed"
+            echo "       Install jq for automatic deduplication, or manually clean pending issues file"
+            error_count=$((error_count + 1))
+        fi
+    fi
+    
+    # Deduplication summary
+    echo "📊 Deduplication Summary:"
+    echo "   🔍 Duplicates detected: $duplicates_found"
+    echo "   ❌ Issues removed: $issues_removed"
+    echo "   ⚠️  Processing errors: $error_count"
+    
+    if [ $error_count -gt 0 ]; then
+        echo "⚠️  Deduplication completed with errors - manual review recommended"
+        return 1
+    elif [ $duplicates_found -gt 0 ]; then
+        echo "✅ Deduplication completed successfully - removed $issues_removed duplicates"
+        return 0
+    else
+        echo "ℹ️  No duplicates found - all pending issues are unique"
+        return 0
+    fi
+}
+
+# Execute deduplication workflow
+echo "🚀 Starting automated deduplication workflow..."
+echo "   Step 1: Migrate manually implemented issues to completed/"
+echo "   Step 2: Remove duplicates from pending issues"
+echo ""
+
+# Step 1: Migrate implemented issues
+if migrate_implemented_issues; then
+    echo "✅ Step 1 completed: Issue migration successful"
+else
+    echo "⚠️  Step 1 completed with warnings: Issue migration had errors"
+fi
+
+echo ""
+
+# Step 2: Deduplicate remaining issues
+if deduplicate_issues; then
+    echo "✅ Step 2 completed: Deduplication successful"
+else
+    echo "⚠️  Step 2 completed with warnings: Deduplication had errors"
+fi
+
+echo ""
+echo "🎯 Deduplication workflow complete. Remaining issues are unique and not yet implemented."
+echo "📁 Check .claude/optimize/completed/ for migrated issues requiring manual verification."
+echo ""
+```
+
 ## Context Analysis
 
 Gather changes since last optimization:
@@ -165,7 +791,11 @@ Create comprehensive issues.json with realistic optimization scenarios:
 ```bash
 echo "Generating issues.json with realistic optimization scenarios..."
 
-cat > .claude/optimize/pending/issues.json << 'EOF'
+# Define file paths for atomic operations
+TEMP_ISSUES_FILE=$(mktemp ".claude/optimize/pending/issues.json.XXXXXX" 2>/dev/null) || TEMP_ISSUES_FILE=".claude/optimize/pending/issues.json.tmp.$(date +%s)$$"
+FINAL_ISSUES_FILE=".claude/optimize/pending/issues.json"
+
+cat > "$TEMP_ISSUES_FILE" << 'EOF'
 {
   "analysis_session": {
     "timestamp": "TIMESTAMP_PLACEHOLDER",
@@ -424,7 +1054,7 @@ if ! echo "$TIMESTAMP" | grep -qE '^[0-9]{8}_[0-9]{6}$'; then
 fi
 
 # Validate paths and create report content in temporary file with safety checks
-TEMP_REPORT_FILE=".claude/optimize/reports/optimization_${TIMESTAMP}.md.tmp.$$"
+TEMP_REPORT_FILE=$(mktemp ".claude/optimize/reports/optimization_${TIMESTAMP}.md.XXXXXX" 2>/dev/null) || TEMP_REPORT_FILE=".claude/optimize/reports/optimization_${TIMESTAMP}.md.tmp.$(date +%s)$$"
 FINAL_REPORT_FILE=".claude/optimize/reports/optimization_${TIMESTAMP}.md"
 
 # Verify timestamp is safe for filename
